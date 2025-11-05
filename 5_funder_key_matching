@@ -1,0 +1,18 @@
+    create
+    or replace table els_stmj_db_sandbox.stmj_sandbox.funding_us_quarterly_report_funder_key_matching
+    as
+
+with
+    prep as (
+        select distinct
+            identifier_key as funder_key,
+            funding_body_id_parent_revised as funding_body_id_parent,
+            count(distinct funding_body_id_parent_revised) over (
+                partition by funder_key
+            ) as n_matches
+        from els_stmj_db_sandbox.stmj_sandbox.funding_us_quarterly_report_names_matching
+        qualify is_match = 1 and n_matches = 1 and variable = 'funder_name'
+    )
+
+select funder_key, funding_body_id_parent
+from prep
