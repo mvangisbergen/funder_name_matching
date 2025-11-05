@@ -1,0 +1,47 @@
+create or replace table els_stmj_db_sandbox.stmj_sandbox.funding_us_quarterly_report_staging_internal_source as
+
+with
+    articles as (
+        select
+            fal.article_key,
+            df.funder_key,
+            bf.funder_country_key,
+            df.funder_code,
+            df.funder_name,
+            dag.agreement_key,
+            case
+                when dag.agreement_name <> 'Not Available at Source'
+                then dag.agreement_name
+                else null
+            end as agreement_name,
+            case
+                when dag.master_agreement_name <> 'Not Available at Source'
+                then dag.master_agreement_name
+                else null
+            end as master_agreement_name,
+            diba.article_quote_billing_account_institute_name
+            as article_billing_account,
+            diba.article_quote_billing_account_institute_key as article_billing_key,
+            da.scopus_eid
+        from els_stmj_db_prod.stmj_reporting.fact_article_lifecycle fal
+        left join
+            els_stmj_db_prod.stmj_reporting.dim_article da
+            on da.article_key = fal.article_key
+        left join
+            els_stmj_db_prod.stmj_reporting.bridge_funder bf
+            on bf.funder_group_key = fal.funder_group_key
+        left join
+            els_stmj_db_prod.stmj_reporting.dim_funder df
+            on df.funder_key = bf.funder_key
+        left join
+            els_stmj_db_prod.stmj_reporting.dim_institute_article_quote_billing_account diba
+            on fal.article_quote_billing_account_institute_key
+            = diba.article_quote_billing_account_institute_key
+        left join
+            els_stmj_db_prod.stmj_reporting.dim_agreement dag
+            on fal.agreement_key = dag.agreement_key
+        where year(fal.submission_date) >= 2023
+    )
+
+select *
+from articles
