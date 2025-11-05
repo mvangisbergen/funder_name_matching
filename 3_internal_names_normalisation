@@ -1,0 +1,70 @@
+    create
+    or replace table els_stmj_db_sandbox.stmj_sandbox.funding_us_quarterly_report_internal_names_normalisation
+    as
+
+with
+    prep as (
+        select *
+        from
+            els_stmj_db_sandbox.stmj_sandbox.funding_us_quarterly_report_staging_internal_source
+    ),
+
+    funder_names as (
+        select
+            count(distinct article_key) as n_articles,
+            funder_key as identifier_key,
+            funder_name as funder_name,
+            'funder_name' as variable
+        from prep
+        where funder_key > 0
+        group by all
+
+        union all
+
+        select
+            count(distinct article_key) as n_articles,
+            agreement_key as identifier_key,
+            agreement_name as funder_name,
+            'agreement_name' as variable
+        from prep
+        where agreement_key > 0
+        group by all
+
+        union all
+
+        select
+            count(distinct article_key) as n_articles,
+            article_billing_key as identifier_key,
+            article_billing_account as funder_name,
+            'article_billing_account' as variable
+        from prep
+        where article_billing_key > 0
+        group by all
+    ),
+
+    final_cte as (
+        select
+            identifier_key,
+            funder_name as funder_name_original,
+            variable,
+            n_articles,
+            lower(
+                trim(
+                    replace (
+                        replace (replace (funder_name_original, '.', ''), ',', ''),
+                        '-',
+                        ''
+                    )
+                )
+            ) as funder_name_cleaned,
+            regexp_replace(
+                funder_name_cleaned,
+                '^the | inc$| lcc$| pvt ltd$| co ltd$| corp$| ltd$| limited$| gmbh$| incorporated$| srl$| cco$',
+                ''
+            ) as funder_name_stripped
+        from funder_names
+    )
+
+select *
+from final_cte
+order by n_articles desc
