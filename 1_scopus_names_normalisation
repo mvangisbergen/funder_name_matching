@@ -1,0 +1,73 @@
+    create
+    or replace table els_stmj_db_sandbox.stmj_sandbox.funding_us_quarterly_report_scopus_names_normalisation
+    as
+
+with
+    -- scopus
+    prep as (
+        select *
+        from
+            els_stmj_db_sandbox.stmj_sandbox.funding_us_quarterly_report_funder_metadata
+    ),
+
+    prep2 as (
+        select distinct
+            funder_name_parent as funder_name,
+            funder_name_parent,
+            funding_body_id_parent
+        from prep
+        union all
+        select distinct
+            funder_name_child as funder_name, funder_name_parent, funding_body_id_parent
+        from prep
+        union all
+        select distinct
+            alternate_name_child as funder_name,
+            funder_name_parent,
+            funding_body_id_parent
+        from prep
+        union all
+        select distinct
+            alternate_name_parent as funder_name,
+            funder_name_parent,
+            funding_body_id_parent
+        from prep
+        union all
+        select distinct
+            funder_acronym_child as funder_name,
+            funder_name_parent,
+            funding_body_id_parent
+        from prep
+        union all
+        select distinct
+            funder_acronym_parent as funder_name,
+            funder_name_parent,
+            funding_body_id_parent
+        from prep
+    ),
+
+    final_cte as (
+        select distinct
+            funder_name_parent,
+            funding_body_id_parent,
+            funder_name as funder_name_original,
+            lower(
+                trim(
+                    replace (
+                        replace (replace (funder_name_original, '.', ''), ',', ''),
+                        '-',
+                        ''
+                    )
+                )
+            ) as scopus_funder_name_cleaned,
+            regexp_replace(
+                scopus_funder_name_cleaned,
+                '^the | inc$| lcc$| pvt ltd$| co ltd$| corp$| ltd$| limited$| gmbh$| incorporated$| srl$| cco$',
+                ''
+            ) as scopus_funder_name_stripped
+        from prep2
+        where length(funder_name) > 1
+    )
+
+select *
+from final_cte
