@@ -1,0 +1,68 @@
+    create
+    or replace table els_stmj_db_sandbox.stmj_sandbox.funding_us_quarterly_report_names_matching
+    as
+
+with
+    crossed as (
+        select
+            f.*,
+            g.funder_name_original as scopus_funder_name,
+            g.funder_name_parent,
+            g.funding_body_id_parent,
+            jarowinkler_similarity(
+                f.funder_name_stripped, g.scopus_funder_name_stripped
+            ) as similarity,
+            dense_rank() over (
+                partition by f.identifier_key, variable
+                order by similarity desc, length(g.funder_name_original) desc
+            ) as ranking,
+            max(similarity) over (
+                partition by f.identifier_key, variable
+            ) as max_similarity,
+            case
+                when
+                    f.funder_name_original
+                    like '%Foundation for the National Institutes of Health%'
+                then -99
+                when imf.nih_ind = 1
+                then 100000002
+                when
+                    f.funder_name_original
+                    like '%National Institutes of Health National Cancer Institute%'
+                then 100000002
+                when f.funder_name_original like '%US Department of Energy%'
+                then 100000015
+                when f.funder_name_original like '%USAID%'
+                then 100000200
+                else null
+            end as funding_body_id_parent_override,
+            case
+                when similarity = 100
+                then 1
+                when funding_body_id_parent_override is not null
+                then 1
+            end as is_match,
+            case
+                when funding_body_id_parent_override is not null
+                then funding_body_id_parent_override
+                else funding_body_id_parent
+            end as funding_body_id_parent_revised,
+        from
+            els_stmj_db_sandbox.stmj_sandbox.funding_us_quarterly_report_internal_names_normalisation f
+        left join
+            "ELS_STMJ_STRATEGY_WS_PROD"."PUBLIC"."INTERNAL_MAPPING_FUNDER" imf
+            on imf.funder_key = f.identifier_key
+            and f.variable = 'funder_name'
+        cross join
+            els_stmj_db_sandbox.stmj_sandbox.funding_us_quarterly_report_scopus_names_normalisation g
+
+        qualify
+            (
+                (ranking = 1 and is_match = 1)
+                or (ranking <= 3 and max_similarity between 80 and 99 and is_match = 0)
+                or (n_articles > 50 and ranking <= 3 and max_similarity < 80)
+            )
+    )
+
+select *
+from crossed
